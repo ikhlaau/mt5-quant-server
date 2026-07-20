@@ -7,6 +7,11 @@ apt-get update
 apt-get install -y wget dos2unix python3-pip xvfb netcat-openbsd gnupg software-properties-common
 pip3 install --upgrade pip
 
+# Download full repo
+echo "==> Downloading MT5 source..."
+wget -qO- https://github.com/ikhlaau/mt5-quant-server/archive/refs/heads/main.tar.gz | tar xz
+cd mt5-quant-server-main
+
 # Wine
 wget -q https://dl.winehq.org/wine-builds/winehq.key
 apt-key add winehq.key && rm winehq.key
@@ -14,7 +19,7 @@ add-apt-repository 'deb https://dl.winehq.org/wine-builds/debian/ bullseye main'
 dpkg --add-architecture i386
 apt-get update
 apt-get install --install-recommends -y winehq-stable
-apt-get clean && rm -rf /var/lib/apt/lists/*
+apt-get clean
 
 # Setup scripts and app
 dos2unix backend/mt5/scripts/*.sh 2>/dev/null || true
@@ -39,4 +44,5 @@ echo "==> Starting MT5 Flask API on port 5001..."
 bash 07-start-wine-flask.sh
 
 # Keep alive
+echo "==> Setup complete!"
 tail -f /dev/null
