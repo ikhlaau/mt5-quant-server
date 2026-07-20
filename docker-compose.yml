@@ -1,0 +1,22 @@
+services:
+  mt5:
+    build:
+      context: backend/mt5
+      dockerfile: Dockerfile
+    container_name: mt5
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - mt5-config:/config
+    ports:
+      - "5001:5001"  # Flask API
+      - "3000:3000"  # KasmVNC web desktop
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  mt5-config:
