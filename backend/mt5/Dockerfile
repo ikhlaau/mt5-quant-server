@@ -1,57 +1,42 @@
-# Stage 1: Base image with apt packages
-FROM ghcr.io/linuxserver/baseimage-kasmvnc:debianbullseye-8446af38-ls104 AS base
+FROM debian:bullseye-slim
 
-ENV TITLE=MetaTrader
 ENV WINEARCH=win64
-ENV WINEPREFIX="/config/.wine"
-ENV DISPLAY=:0
+ENV WINEPREFIX=/root/.wine
+ENV DISPLAY=:99
+ENV MT5_API_PORT=5001
 
-# Ensure the directory exists with correct permissions
-RUN mkdir -p /config/.wine && \
-    chown -R abc:abc /config/.wine && \
-    chmod -R 755 /config/.wine
-
-# Update package lists and upgrade packages
-RUN apt-get update && apt-get upgrade -y
-
-# Install required packages
-RUN apt-get install -y \
-    dos2unix \
-    python3-pip \
-    wget \
-    python3-pyxdg \
-    netcat \
-    && pip3 install --upgrade pip
-
-# Add WineHQ repository key and APT source
-RUN wget -q https://dl.winehq.org/wine-builds/winehq.key > /dev/null 2>&1\
-    && apt-key add winehq.key \
-    && add-apt-repository 'deb https://dl.winehq.org/wine-builds/debian/ bullseye main' \
-    && rm winehq.key
-
-# Add i386 architecture and update package lists
-RUN dpkg --add-architecture i386 \
-    && apt-get update
-
-# Install WineHQ stable package and dependencies
-RUN apt-get install --install-recommends -y \
-    winehq-stable \
-    && apt-get clean \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    dos2unix python3-pip wget python3 python3-venv \
+    xvfb gnupg software-properties-common netcat curl \
+    && pip3 install --upgrade pip \
     && rm -rf /var/lib/apt/lists/*
 
-# Stage 2: Final image
-FROM base
+# WineHQ
+RUN wget -q https://dl.winehq.org/wine-builds/winehq.key \
+    && apt-key add winehq.key && rm winehq.key \
+    && add-apt-repository 'deb https://dl.winehq.org/wine-builds/debian/ bullseye main' \
+    && dpkg --add-architecture i386 && apt-get update \
+    && apt-get install --install-recommends -y winehq-stable \
+    && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Copy the scripts directory and convert start.sh to Unix format
+# App code
 COPY app /app
 COPY scripts /scripts
-RUN dos2unix /scripts/*.sh && \
-    chmod +x /scripts/*.sh
+RUN dos2unix /scripts/*.sh && chmod +x /scripts/*.sh
 
-COPY /root /
-RUN touch /var/log/mt5_setup.log && \
-    chown abc:abc /var/log/mt5_setup.log && \
-    chmod 644 /var/log/mt5_setup.log
+# Virtual display for Wine
+RUN echo 'Xvfb :99 -screen 0 1024x768x16 &' > /start-xvfb.sh && chmod +x /start-xvfb.sh
 
-EXPOSE 3000 5000 5001 8001 18812
-VOLUME /config
+# Install MT5 + Python for Wine
+RUN bash /scripts/02-common.sh || true \
+    && bash /scripts/03-install-mono.sh || true \
+    && bash /scripts/04-install-mt5.sh || true \
+    && bash /scripts/05-install-python.sh || true \
+    && bash /scripts/06-install-libraries.sh || true
+
+EXPOSE 3000 5000 5001 8001
+
+# Start script
+RUN echo '#!/bin/bash\n/start-xvfb.sh\nsleep 2\nbash /scripts/07-start-wine-flask.sh\ntail -f /dev/null' > /start.sh && chmod +x /start.sh
+
+CMD ["/start.sh"]
